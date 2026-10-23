@@ -1,24 +1,28 @@
 {% extends "base.html" %}
 {% block title %}对话 — {{ graph.name }}{% endblock %}
 
+{% block head %}
+<style>
+    html, body { height: 100%; overflow: hidden; }
+    main { height: 100%; overflow: hidden; }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="flex h-screen overflow-hidden">
+<div class="flex h-full w-full overflow-hidden">
     <!-- Sidebar: graph selector -->
-    <aside class="w-56 bg-dark-800 border-r border-dark-700 flex flex-col shrink-0">
-        <div class="p-4 border-b border-dark-700">
+    <aside class="w-52 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0">
+        <div class="p-4 border-b border-slate-800">
             <h2 class="text-sm font-bold text-white">图谱对话</h2>
-            <p class="text-xs text-dark-200 mt-0.5">基于知识图谱的问答</p>
+            <p class="text-xs text-slate-500 mt-0.5">基于知识图谱的问答</p>
         </div>
         <div class="p-3 flex-1 overflow-y-auto">
-            <label class="text-xs text-dark-200 block mb-1 px-1">选择图谱</label>
+            <label class="text-xs text-slate-500 block mb-1 px-1">选择图谱</label>
             <select id="graph-selector" class="input-field w-full text-sm mb-4" onchange="switchGraph(this.value)">
                 {% for g in graphs %}
-                <option value="{{ g.id }}" {% if g.id == graph.id %}selected{% endif %}>
-                    {{ g.name }}
-                </option>
+                <option value="{{ g.id }}" {% if g.id == graph.id %}selected{% endif %}>{{ g.name }}</option>
                 {% endfor %}
             </select>
-
             <div class="space-y-1">
                 <a href="/graphs/{{ graph.id }}" class="nav-item text-xs">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
@@ -33,11 +37,11 @@
     </aside>
 
     <!-- Chat area -->
-    <div class="flex-1 flex flex-col">
+    <div class="flex-1 flex flex-col min-w-0">
         <!-- Header -->
-        <div class="px-6 py-3 border-b border-dark-700 bg-dark-800/50">
+        <div class="px-6 py-3 border-b border-slate-800 bg-slate-900/50 shrink-0">
             <h3 class="text-sm font-semibold text-white" id="chat-graph-name">{{ graph.name }}</h3>
-            <p class="text-xs text-dark-200">
+            <p class="text-xs text-slate-500">
                 {{ graph.node_count }} 节点 · {{ graph.link_count }} 边 · {{ graph.community_count }} 社区
             </p>
         </div>
@@ -47,12 +51,12 @@
             <div class="chat-bubble assistant">
                 <div class="chat-bubble-header">
                     <span class="chat-avatar bg-emerald-500/20 text-emerald-400">⬡</span>
-                    <span class="text-xs text-dark-200">Graphify 助手</span>
+                    <span class="text-xs text-slate-500">Graphify 助手</span>
                 </div>
                 <div class="chat-bubble-body">
                     <p>你好！我是图谱分析助手。你可以问我关于这个代码仓库的任何问题，我会基于知识图谱来回答。</p>
                     <p class="mt-2 text-sm opacity-70">试试问：</p>
-                    <div class="mt-1 flex flex-wrap gap-2">
+                    <div class="mt-2 flex flex-wrap gap-2">
                         <button onclick="askSuggestion(this.textContent)" class="suggestion-chip">项目的核心架构是什么？</button>
                         <button onclick="askSuggestion(this.textContent)" class="suggestion-chip">哪些模块之间耦合最紧密？</button>
                         <button onclick="askSuggestion(this.textContent)" class="suggestion-chip">主要的入口点在哪里？</button>
@@ -61,31 +65,27 @@
             </div>
         </div>
 
-        <!-- Context panel (collapsible) -->
-        <div id="context-panel" class="hidden border-t border-dark-700 bg-dark-800/30 max-h-40 overflow-y-auto">
+        <!-- Context panel -->
+        <div id="context-panel" class="hidden border-t border-slate-800 bg-slate-900/30 max-h-36 overflow-y-auto shrink-0">
             <div class="px-6 py-2 flex items-center justify-between">
-                <span class="text-xs text-dark-200 font-semibold">图谱上下文</span>
-                <button onclick="toggleContext()" class="text-xs text-dark-200 hover:text-white">收起</button>
+                <span class="text-xs text-slate-500 font-semibold">图谱上下文</span>
+                <button onclick="toggleContext()" class="text-xs text-slate-500 hover:text-white">收起</button>
             </div>
-            <div id="context-content" class="px-6 pb-2 text-xs text-dark-200 font-mono"></div>
+            <div id="context-content" class="px-6 pb-3 text-xs text-slate-400 font-mono"></div>
         </div>
 
         <!-- Input bar -->
-        <div class="px-6 py-4 border-t border-dark-700 bg-dark-800/50">
+        <div class="px-6 py-4 border-t border-slate-800 bg-slate-900/50 shrink-0">
             <form id="chat-form" onsubmit="sendMessage(event)" class="flex gap-3">
                 <input type="text" id="chat-input" placeholder="输入你的问题…"
                        class="input-field flex-1" autocomplete="off">
-                <button type="submit" id="send-btn" class="btn-primary px-6">
-                    发送
-                </button>
+                <button type="submit" id="send-btn" class="btn-primary px-6">发送</button>
             </form>
         </div>
     </div>
 </div>
 
-<script>
-    const GRAPH_ID = "{{ graph.id }}";
-</script>
+<script>const GRAPH_ID = "{{ graph.id }}";</script>
 {% endblock %}
 
 {% block scripts %}

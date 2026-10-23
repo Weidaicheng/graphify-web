@@ -1,54 +1,57 @@
 /* graph_viewer.js — D3.js force-directed graph viewer */
 
-let svg, g, simulation, zoom;
+let svgEl, g, simulation, zoomBehavior;
 let nodesData = [], linksData = [];
 let nodeElements, linkElements, labelElements;
 let selectedNode = null;
+let width = 800, height = 600;
 
 const colorScale = d3.scaleOrdinal(d3.schemeTableau10);
-const container = document.getElementById('graph-container');
-const width = container.clientWidth;
-const height = container.clientHeight;
 
 // ── Init ───────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
+    const container = document.getElementById('graph-container');
+    const rect = container.getBoundingClientRect();
+    width = rect.width || 800;
+    height = rect.height || 600;
+
     initSVG();
     loadGraphData();
+
+    // Resize observer for responsive layout
+    new ResizeObserver(() => {
+        const r = container.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) {
+            width = r.width;
+            height = r.height;
+            svgEl.attr('width', width).attr('height', height);
+            if (simulation) {
+                simulation.force('center', d3.forceCenter(width / 2, height / 2));
+                simulation.force('x', d3.forceX(width / 2).strength(0.03));
+                simulation.force('y', d3.forceY(height / 2).strength(0.03));
+                simulation.alpha(0.3).restart();
+            }
+        }
+    }).observe(container);
 });
 
 function initSVG() {
-    svg = d3.select('#graph-svg')
+    svgEl = d3.select('#graph-svg')
         .attr('width', width)
         .attr('height', height);
 
-    // Zoom behavior
-    zoom = d3.zoom()
-        .scaleExtent([0.1, 10])
+    zoomBehavior = d3.zoom()
+        .scaleExtent([0.05, 10])
         .on('zoom', (event) => {
             g.attr('transform', event.transform);
-            // Show labels only when zoomed in enough
             const k = event.transform.k;
             g.selectAll('.node text')
-                .attr('display', k > 1.5 || d3.select(event.target).datum()?.degree > 10 ? null : 'none');
+                .attr('display', function(d) { return k > 1.2 || d.degree > 10 ? null : 'none'; });
         });
 
-    svg.call(zoom);
-
-    g = svg.append('g');
-
-    // Arrow marker for directed edges (optional)
-    svg.append('defs').append('marker')
-        .attr('id', 'arrow')
-        .attr('viewBox', '0 -5 10 10')
-        .attr('refX', 15)
-        .attr('refY', 0)
-        .attr('markerWidth', 6)
-        .attr('markerHeight', 6)
-        .attr('orient', 'auto')
-        .append('path')
-        .attr('d', 'M0,-5L10,0L0,5')
-        .attr('fill', '#475569');
+    svgEl.call(zoomBehavior);
+    g = svgEl.append('g');
 }
 
 // ── Data loading ───────────────────────────────────────────
@@ -78,7 +81,6 @@ async function loadGraphData() {
 // ── Rendering ──────────────────────────────────────────────
 
 function render() {
-    // Clear previous
     g.selectAll('*').remove();
 
     // Links
@@ -133,7 +135,6 @@ function ticked() {
         .attr('x2', d => d.target.x)
         .attr('y2', d => d.target.y);
 
-    // Position node groups via transform (circles/text are relative to group origin)
     g.selectAll('.node')
         .attr('transform', d => `translate(${d.x},${d.y})`);
 }
@@ -160,17 +161,13 @@ function dragEnd(event, d) {
 // ── Interactions ───────────────────────────────────────────
 
 function onNodeClick(d) {
-    // Deselect previous
     if (selectedNode) {
         g.selectAll('.node circle').classed('dimmed', false).classed('highlighted', false);
         g.selectAll('.link').classed('highlighted', false);
     }
-
     selectedNode = d;
 
-    // Find neighbors
-    const neighborIds = new Set();
-    neighborIds.add(d.id);
+    const neighborIds = new Set([d.id]);
     linksData.forEach(l => {
         const sid = typeof l.source === 'object' ? l.source.id : l.source;
         const tid = typeof l.target === 'object' ? l.target.id : l.target;
@@ -178,7 +175,6 @@ function onNodeClick(d) {
         if (tid === d.id) neighborIds.add(sid);
     });
 
-    // Highlight
     g.selectAll('.node circle')
         .classed('dimmed', n => !neighborIds.has(n.id))
         .classed('highlighted', n => n.id === d.id);
@@ -190,7 +186,6 @@ function onNodeClick(d) {
             return sid === d.id || tid === d.id;
         });
 
-    // Show detail panel
     showNodeDetail(d);
 }
 
@@ -202,51 +197,51 @@ async function showNodeDetail(d) {
     content.innerHTML = `
         <div class="space-y-3">
             <div>
-                <p class="text-xs text-dark-200">名称</p>
-                <p class="text-white font-medium">${d.label}</p>
+                <p class="text-xs text-slate-500">名称</p>
+                <p class="text-white font-medium text-sm">${d.label}</p>
             </div>
             <div>
-                <p class="text-xs text-dark-200">文件</p>
-                <p class="text-white text-xs font-mono">${d.source_file || '-'}</p>
+                <p class="text-xs text-slate-500">文件</p>
+                <p class="text-slate-300 text-xs font-mono break-all">${d.source_file || '-'}</p>
             </div>
             <div class="grid grid-cols-2 gap-2">
-                <div>
-                    <p class="text-xs text-dark-200">社区</p>
+                <div class="bg-slate-800/50 rounded p-2">
+                    <p class="text-xs text-slate-500">社区</p>
                     <p class="text-white text-xs">${d.community_name || 'Community ' + d.community}</p>
                 </div>
-                <div>
-                    <p class="text-xs text-dark-200">连接度</p>
+                <div class="bg-slate-800/50 rounded p-2">
+                    <p class="text-xs text-slate-500">连接度</p>
                     <p class="text-white text-xs">${d.degree}</p>
                 </div>
-                <div>
-                    <p class="text-xs text-dark-200">类型</p>
+                <div class="bg-slate-800/50 rounded p-2">
+                    <p class="text-xs text-slate-500">类型</p>
                     <p class="text-white text-xs">${d.file_type || '-'}</p>
                 </div>
-                <div>
-                    <p class="text-xs text-dark-200">位置</p>
+                <div class="bg-slate-800/50 rounded p-2">
+                    <p class="text-xs text-slate-500">位置</p>
                     <p class="text-white text-xs">${d.source_location || '-'}</p>
                 </div>
             </div>
-            <hr class="border-dark-700">
+            <hr class="border-slate-800">
             <div>
-                <p class="text-xs text-dark-200 mb-1">邻居节点</p>
-                <div id="neighbor-list" class="space-y-1 text-xs text-dark-200">加载中…</div>
+                <p class="text-xs text-slate-500 mb-1">邻居节点</p>
+                <div id="neighbor-list" class="space-y-0.5 text-xs text-slate-400">加载中…</div>
             </div>
         </div>
     `;
 
-    // Fetch full detail
     try {
         const detail = await apiFetch(`/api/graphs/${GRAPH_ID}/node/${encodeURIComponent(d.id)}`);
         const list = document.getElementById('neighbor-list');
         if (detail.neighbors && detail.neighbors.length > 0) {
             list.innerHTML = detail.neighbors.map(n =>
-                `<button onclick="focusNode('${n.id}')" class="block w-full text-left px-2 py-1 rounded hover:bg-dark-700 text-dark-200 hover:text-white transition-colors truncate">
-                    ${n.label} <span class="opacity-40">${n.source_file ? '· ' + n.source_file.split('/').pop() : ''}</span>
+                `<button onclick="focusNode('${n.id}')" class="god-node-btn truncate">
+                    <span class="text-white">${n.label}</span>
+                    <span class="text-slate-500 ml-1">${n.source_file ? '· ' + n.source_file.split('/').pop() : ''}</span>
                 </button>`
             ).join('');
         } else {
-            list.innerHTML = '<p class="opacity-40">无邻居节点</p>';
+            list.innerHTML = '<p class="text-slate-600">无邻居节点</p>';
         }
     } catch (e) {
         document.getElementById('neighbor-list').innerHTML = '<p class="text-red-400">加载失败</p>';
@@ -267,13 +262,13 @@ let tooltipEl = null;
 function showTooltip(event, d) {
     if (!tooltipEl) {
         tooltipEl = document.createElement('div');
-        tooltipEl.className = 'fixed z-50 bg-dark-800 border border-dark-700 rounded-lg px-3 py-2 text-xs shadow-xl pointer-events-none';
+        tooltipEl.style.cssText = 'position:fixed;z-index:50;background:#0f172a;border:1px solid #334155;border-radius:0.5rem;padding:0.5rem 0.75rem;font-size:0.75rem;box-shadow:0 10px 15px -3px rgba(0,0,0,0.3);pointer-events:none;max-width:250px';
         document.body.appendChild(tooltipEl);
     }
     tooltipEl.innerHTML = `
-        <p class="text-white font-medium">${d.label}</p>
-        <p class="text-dark-200">${d.source_file || ''}</p>
-        <p class="text-dark-200">${d.community_name || 'Community ' + d.community} · degree ${d.degree}</p>
+        <p style="color:#fff;font-weight:500">${d.label}</p>
+        <p style="color:#94a3b8">${d.source_file || ''}</p>
+        <p style="color:#64748b">${d.community_name || 'Community ' + d.community} · degree ${d.degree}</p>
     `;
     tooltipEl.style.left = (event.clientX + 12) + 'px';
     tooltipEl.style.top = (event.clientY - 10) + 'px';
@@ -289,7 +284,6 @@ function hideTooltip() {
 function onSearch(query) {
     query = query.toLowerCase().trim();
     g.selectAll('.node circle').classed('search-match', false);
-
     if (!query) return;
 
     const matches = nodesData.filter(n =>
@@ -300,31 +294,28 @@ function onSearch(query) {
     g.selectAll('.node circle')
         .classed('search-match', d => matches.some(m => m.id === d.id));
 
-    // Pan to first match
     if (matches.length > 0) {
         const first = matches[0];
-        const transform = d3.zoomTransform(svg.node());
+        const transform = d3.zoomTransform(svgEl.node());
         const x = width / 2 - first.x * transform.k;
         const y = height / 2 - first.y * transform.k;
-        svg.transition().duration(500)
-            .call(zoom.transform, d3.zoomIdentity.translate(x, y).scale(transform.k));
+        svgEl.transition().duration(500)
+            .call(zoomBehavior.transform, d3.zoomIdentity.translate(x, y).scale(transform.k));
     }
 }
 
-// ── Focus node (from god nodes list) ───────────────────────
+// ── Focus node ─────────────────────────────────────────────
 
 function focusNode(nodeId) {
     const node = nodesData.find(n => n.id === nodeId);
     if (!node) return;
 
-    // Pan to node
-    const transform = d3.zoomTransform(svg.node());
+    const transform = d3.zoomTransform(svgEl.node());
     const x = width / 2 - node.x * transform.k;
     const y = height / 2 - node.y * transform.k;
-    svg.transition().duration(500)
-        .call(zoom.transform, d3.zoomIdentity.translate(x, y).scale(transform.k));
+    svgEl.transition().duration(500)
+        .call(zoomBehavior.transform, d3.zoomIdentity.translate(x, y).scale(transform.k));
 
-    // Simulate click
     onNodeClick(node);
 }
 
@@ -342,13 +333,11 @@ function applyFilters() {
 // ── Zoom controls ──────────────────────────────────────────
 
 function zoomIn() {
-    svg.transition().duration(300).call(zoom.scaleBy, 1.5);
+    svgEl.transition().duration(300).call(zoomBehavior.scaleBy, 1.5);
 }
-
 function zoomOut() {
-    svg.transition().duration(300).call(zoom.scaleBy, 0.67);
+    svgEl.transition().duration(300).call(zoomBehavior.scaleBy, 0.67);
 }
-
 function zoomReset() {
-    svg.transition().duration(500).call(zoom.transform, d3.zoomIdentity);
+    svgEl.transition().duration(500).call(zoomBehavior.transform, d3.zoomIdentity);
 }
