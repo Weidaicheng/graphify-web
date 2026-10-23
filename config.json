@@ -1,0 +1,9 @@
+{
+  "llm": {
+    "base_url": "https://api.quickrouter.ai/v1",
+    "api_key": "",
+    "model": "gpt-4o-mini"
+  },
+  "graphify_bin": "/Users/weidaicheng/.local/bin/graphify",
+  "port": 8900
+}

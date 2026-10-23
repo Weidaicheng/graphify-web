@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}{{ graph.name }} — 图谱查看器{% endblock %}
+
+{% block head %}
+<script src="https://d3js.org/d3.v7.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="flex h-screen overflow-hidden">
+    <!-- Left panel: filters -->
+    <aside class="w-64 bg-dark-800 border-r border-dark-700 flex flex-col overflow-y-auto shrink-0">
+        <div class="p-4 border-b border-dark-700">
+            <a href="/graphs" class="text-xs text-dark-200 hover:text-white mb-2 inline-block">← 返回列表</a>
+            <h2 class="text-sm font-bold text-white truncate" title="{{ graph.name }}">{{ graph.name }}</h2>
+            <p class="text-xs text-dark-200 mt-0.5">
+                {{ stats.node_count if stats else graph.node_count }} 节点 ·
+                {{ stats.link_count if stats else graph.link_count }} 边
+            </p>
+        </div>
+
+        <!-- Search -->
+        <div class="p-4 border-b border-dark-700">
+            <label class="text-xs text-dark-200 block mb-1">搜索节点</label>
+            <input type="text" id="search-input" placeholder="输入节点名称…"
+                   class="input-field w-full text-sm" oninput="onSearch(this.value)">
+        </div>
+
+        <!-- Filters -->
+        <div class="p-4 border-b border-dark-700 space-y-3">
+            <div>
+                <label class="text-xs text-dark-200 block mb-1">社区筛选</label>
+                <select id="community-filter" class="input-field w-full text-sm" onchange="applyFilters()">
+                    <option value="">全部社区</option>
+                    {% for c in communities[:30] %}
+                    <option value="{{ c.id }}">{{ c.name }} ({{ c.count }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="text-xs text-dark-200 block mb-1">文件类型</label>
+                <select id="filetype-filter" class="input-field w-full text-sm" onchange="applyFilters()">
+                    <option value="">全部</option>
+                    <option value="code">代码</option>
+                    <option value="concept">概念</option>
+                </select>
+            </div>
+            <div>
+                <label class="text-xs text-dark-200 block mb-1">
+                    最大节点数: <span id="max-nodes-label">500</span>
+                </label>
+                <input type="range" id="max-nodes" min="50" max="2000" step="50" value="500"
+                       class="w-full accent-emerald-500" oninput="document.getElementById('max-nodes-label').textContent=this.value; applyFilters()">
+            </div>
+        </div>
+
+        <!-- God nodes -->
+        <div class="p-4 flex-1 overflow-y-auto">
+            <h3 class="text-xs text-dark-200 font-semibold uppercase tracking-wider mb-2">核心节点 (God Nodes)</h3>
+            <div class="space-y-1">
+                {% for g in god_nodes %}
+                <button onclick="focusNode('{{ g.id }}')" class="god-node-btn w-full text-left text-xs px-2 py-1.5 rounded hover:bg-dark-700 transition-colors">
+                    <span class="text-white">{{ g.label }}</span>
+                    <span class="text-dark-200 ml-1">×{{ g.degree }}</span>
+                </button>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Chat link -->
+        <div class="p-4 border-t border-dark-700">
+            <a href="/chat/{{ graph.id }}" class="btn-secondary w-full text-center block text-sm">
+                💬 与此图谱对话
+            </a>
+        </div>
+    </aside>
+
+    <!-- Center: D3 graph -->
+    <div class="flex-1 relative" id="graph-container">
+        <svg id="graph-svg" class="w-full h-full"></svg>
+        <!-- Loading overlay -->
+        <div id="graph-loading" class="absolute inset-0 flex items-center justify-center bg-dark-900/80 z-10">
+            <div class="text-center">
+                <div class="animate-spin w-8 h-8 border-2 border-emerald-400 border-t-transparent rounded-full mx-auto mb-3"></div>
+                <p class="text-dark-200 text-sm">加载图谱数据…</p>
+            </div>
+        </div>
+        <!-- Zoom controls -->
+        <div class="absolute bottom-4 right-4 flex gap-2 z-10">
+            <button onclick="zoomIn()" class="btn-icon" title="放大">+</button>
+            <button onclick="zoomOut()" class="btn-icon" title="缩小">−</button>
+            <button onclick="zoomReset()" class="btn-icon" title="重置">⟲</button>
+        </div>
+    </div>
+
+    <!-- Right panel: node detail -->
+    <aside id="detail-panel" class="w-72 bg-dark-800 border-l border-dark-700 overflow-y-auto shrink-0 hidden">
+        <div class="p-4">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-sm font-bold text-white">节点详情</h3>
+                <button onclick="closeDetail()" class="text-dark-200 hover:text-white text-lg">×</button>
+            </div>
+            <div id="detail-content">
+                <p class="text-dark-200 text-sm">点击节点查看详情</p>
+            </div>
+        </div>
+    </aside>
+</div>
+
+<!-- Pass graph ID to JS -->
+<script>
+    const GRAPH_ID = "{{ graph.id }}";
+</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/graph_viewer.js"></script>
+{% endblock %}

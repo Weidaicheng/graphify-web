@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}仓库管理 — Graphify Admin{% endblock %}
+
+{% block content %}
+<div class="p-8">
+    <div class="flex items-center justify-between mb-8">
+        <div>
+            <h2 class="text-2xl font-bold text-white">仓库管理</h2>
+            <p class="text-dark-200 text-sm mt-1">添加 GitHub 仓库并生成知识图谱</p>
+        </div>
+        <button onclick="openAddModal()" class="btn-primary">
+            <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            添加仓库
+        </button>
+    </div>
+
+    <!-- Repo table -->
+    <div class="card overflow-hidden">
+        {% if repos %}
+        <table class="w-full text-sm" id="repo-table">
+            <thead>
+                <tr class="border-b border-dark-700 text-left text-dark-200">
+                    <th class="pb-3 px-4">名称</th>
+                    <th class="pb-3 px-4">GitHub URL</th>
+                    <th class="pb-3 px-4">状态</th>
+                    <th class="pb-3 px-4">创建时间</th>
+                    <th class="pb-3 px-4 text-right">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for repo in repos %}
+                <tr class="border-b border-dark-700/50 hover:bg-dark-700/30 repo-row" data-id="{{ repo.id }}">
+                    <td class="py-3 px-4 text-white font-medium">{{ repo.name }}</td>
+                    <td class="py-3 px-4">
+                        <a href="{{ repo.github_url }}" target="_blank" class="text-blue-400 hover:underline text-xs">{{ repo.github_url }}</a>
+                    </td>
+                    <td class="py-3 px-4">
+                        <span class="badge badge-{{ 'success' if repo.status == 'ready' else ('error' if repo.status == 'error' else ('warning' if repo.status == 'building' else 'info')) }} repo-status">
+                            {{ repo.status }}
+                        </span>
+                    </td>
+                    <td class="py-3 px-4 text-dark-200 text-xs">{{ repo.created_at[:16] if repo.created_at else '-' }}</td>
+                    <td class="py-3 px-4 text-right space-x-2">
+                        <button onclick="buildRepo('{{ repo.id }}')" class="btn-sm btn-secondary" title="重新构建">构建</button>
+                        <button onclick="updateRepo('{{ repo.id }}')" class="btn-sm btn-secondary" title="增量更新">更新</button>
+                        <button onclick="deleteRepo('{{ repo.id }}')" class="btn-sm text-red-400 hover:text-red-300" title="删除">删除</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="text-center py-12">
+            <svg class="w-12 h-12 mx-auto text-dark-200 opacity-30 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+            <p class="text-dark-200">还没有仓库</p>
+            <p class="text-dark-200 text-xs mt-1 opacity-60">点击「添加仓库」开始</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Add repo modal -->
+<div id="add-modal" class="modal-overlay hidden">
+    <div class="modal-content">
+        <h3 class="text-lg font-bold text-white mb-4">添加 GitHub 仓库</h3>
+        <form id="add-form" onsubmit="submitAddRepo(event)">
+            <label class="block text-sm text-dark-200 mb-1">GitHub URL</label>
+            <input type="text" name="github_url" required
+                   placeholder="https://github.com/owner/repo"
+                   class="input-field w-full mb-4">
+            <div class="flex justify-end gap-3">
+                <button type="button" onclick="closeAddModal()" class="btn-secondary">取消</button>
+                <button type="submit" id="add-submit-btn" class="btn-primary">添加并构建</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let pollTimer = null;
+
+    function openAddModal() { document.getElementById('add-modal').classList.remove('hidden'); }
+    function closeAddModal() { document.getElementById('add-modal').classList.add('hidden'); }
+
+    async function submitAddRepo(e) {
+        e.preventDefault();
+        const url = document.querySelector('#add-form input[name="github_url"]').value.trim();
+        const btn = document.getElementById('add-submit-btn');
+        btn.disabled = true;
+        btn.textContent = '处理中…';
+        try {
+            await apiFetch('/api/repos', { method: 'POST', body: JSON.stringify({ github_url: url }) });
+            showToast('仓库添加成功，正在后台构建…', 'success');
+            closeAddModal();
+            startPolling();
+        } catch (e) { /* toast already shown */ }
+        btn.disabled = false;
+        btn.textContent = '添加并构建';
+    }
+
+    async function buildRepo(id) {
+        await apiFetch(`/api/repos/${id}/build`, { method: 'POST' });
+        showToast('正在重新构建…', 'info');
+        startPolling();
+    }
+
+    async function updateRepo(id) {
+        await apiFetch(`/api/repos/${id}/update`, { method: 'POST' });
+        showToast('正在增量更新…', 'info');
+        startPolling();
+    }
+
+    async function deleteRepo(id) {
+        if (!confirm('确定删除此仓库及其所有图谱？')) return;
+        await apiFetch(`/api/repos/${id}`, { method: 'DELETE' });
+        showToast('已删除', 'success');
+        document.querySelector(`.repo-row[data-id="${id}"]`)?.remove();
+    }
+
+    function startPolling() {
+        if (pollTimer) return;
+        pollTimer = setInterval(async () => {
+            const repos = await apiFetch('/api/repos');
+            let allReady = true;
+            repos.forEach(r => {
+                const row = document.querySelector(`.repo-row[data-id="${r.id}"]`);
+                if (row) {
+                    const badge = row.querySelector('.repo-status');
+                    badge.textContent = r.status;
+                    badge.className = `badge badge-${r.status === 'ready' ? 'success' : r.status === 'error' ? 'error' : r.status === 'building' ? 'warning' : 'info'}`;
+                    if (r.status !== 'ready' && r.status !== 'error') allReady = false;
+                } else {
+                    location.reload();
+                    return;
+                }
+            });
+            if (allReady) { clearInterval(pollTimer); pollTimer = null; showToast('所有任务已完成', 'success'); }
+        }, 3000);
+    }
+
+    // Auto-poll if any repo is not ready
+    document.addEventListener('DOMContentLoaded', () => {
+        const statuses = document.querySelectorAll('.repo-status');
+        const hasActive = Array.from(statuses).some(s => !['ready', 'error'].includes(s.textContent.trim()));
+        if (hasActive) startPolling();
+    });
+</script>
+{% endblock %}

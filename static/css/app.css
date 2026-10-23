@@ -1,0 +1,154 @@
+/* ── Graphify Admin — Custom Styles ── */
+
+/* Navigation items */
+.nav-item {
+    @apply flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-dark-200 hover:text-white hover:bg-dark-700/50 transition-colors;
+}
+.nav-item.active {
+    @apply text-white bg-dark-700/70;
+}
+
+/* Cards */
+.card {
+    @apply bg-dark-800 border border-dark-700 rounded-xl p-4;
+}
+
+/* Stat cards */
+.stat-card {
+    @apply card flex items-center gap-4;
+}
+.stat-icon {
+    @apply w-10 h-10 rounded-lg flex items-center justify-center;
+}
+.stat-value {
+    @apply text-2xl font-bold text-white;
+}
+.stat-label {
+    @apply text-xs text-dark-200;
+}
+
+/* Badges */
+.badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
+}
+.badge-success { @apply bg-emerald-500/20 text-emerald-400; }
+.badge-error   { @apply bg-red-500/20 text-red-400; }
+.badge-warning { @apply bg-amber-500/20 text-amber-400; }
+.badge-info    { @apply bg-blue-500/20 text-blue-400; }
+
+/* Buttons */
+.btn-primary {
+    @apply bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50;
+}
+.btn-secondary {
+    @apply bg-dark-700 hover:bg-dark-700/70 text-dark-100 text-sm font-medium px-4 py-2 rounded-lg border border-dark-700 transition-colors;
+}
+.btn-sm {
+    @apply text-xs px-2.5 py-1.5 rounded-md transition-colors;
+}
+.btn-icon {
+    @apply w-8 h-8 flex items-center justify-center rounded-lg bg-dark-800/90 border border-dark-700 text-dark-200 hover:text-white hover:bg-dark-700 transition-colors text-sm font-bold;
+}
+
+/* Input fields */
+.input-field {
+    @apply bg-dark-700/50 border border-dark-700 rounded-lg px-3 py-2 text-sm text-white placeholder-dark-200 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 focus:border-emerald-500/50;
+}
+
+/* Modal */
+.modal-overlay {
+    @apply fixed inset-0 bg-black/60 flex items-center justify-center z-50;
+}
+.modal-content {
+    @apply bg-dark-800 border border-dark-700 rounded-xl p-6 w-full max-w-md shadow-2xl;
+}
+
+/* Graph card hover */
+.graph-card {
+    @apply transition-all duration-200;
+}
+.graph-card:hover {
+    @apply border-dark-700/80 shadow-lg shadow-black/20;
+}
+
+/* Chat bubbles */
+.chat-bubble {
+    @apply max-w-[80%];
+}
+.chat-bubble.user {
+    @apply ml-auto;
+}
+.chat-bubble.assistant {
+    @apply mr-auto;
+}
+.chat-bubble-header {
+    @apply flex items-center gap-2 mb-1;
+}
+.chat-bubble.user .chat-bubble-header {
+    @apply flex-row-reverse;
+}
+.chat-avatar {
+    @apply w-6 h-6 rounded-full flex items-center justify-center text-xs;
+}
+.chat-bubble-body {
+    @apply px-4 py-3 rounded-xl text-sm leading-relaxed;
+}
+.chat-bubble.user .chat-bubble-body {
+    @apply bg-blue-600 text-white rounded-br-sm;
+}
+.chat-bubble.assistant .chat-bubble-body {
+    @apply bg-dark-700 text-dark-100 rounded-bl-sm;
+}
+
+/* Suggestion chips */
+.suggestion-chip {
+    @apply text-xs px-3 py-1.5 rounded-full bg-dark-700 text-dark-200 hover:text-white hover:bg-dark-700/70 border border-dark-700 transition-colors;
+}
+
+/* D3 graph styles */
+#graph-svg {
+    background: #020617;
+}
+.link {
+    stroke: #334155;
+    stroke-opacity: 0.4;
+    stroke-width: 0.5;
+}
+.link.highlighted {
+    stroke: #10b981;
+    stroke-opacity: 0.8;
+    stroke-width: 1.5;
+}
+.node circle {
+    stroke: #020617;
+    stroke-width: 1;
+    cursor: pointer;
+    transition: r 0.2s;
+}
+.node circle:hover {
+    stroke: #fff;
+    stroke-width: 2;
+}
+.node circle.dimmed {
+    opacity: 0.1;
+}
+.node circle.highlighted {
+    stroke: #fff;
+    stroke-width: 2;
+}
+.node circle.search-match {
+    stroke: #fbbf24;
+    stroke-width: 2.5;
+}
+.node text {
+    fill: #e2e8f0;
+    font-size: 9px;
+    pointer-events: none;
+    text-shadow: 0 0 4px #020617, 0 0 8px #020617;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #475569; }
