@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 from collections import Counter
 
 from graph_manager import GraphManager
@@ -142,7 +143,12 @@ class ChatEngine:
     async def _call_llm_stream(self, messages: list[dict]):
         """Call QuickRouter API with streaming, yield content tokens."""
         httpx = _get_httpx()
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        # Read proxy from env explicitly to avoid httpx NO_PROXY IPv6 parsing bug
+        proxy_url = os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy") or os.environ.get("HTTP_PROXY")
+        client_kwargs = {"timeout": 60.0, "trust_env": False}
+        if proxy_url:
+            client_kwargs["proxy"] = proxy_url
+        async with httpx.AsyncClient(**client_kwargs) as client:
             async with client.stream(
                 "POST",
                 f"{self.base_url}/chat/completions",
@@ -169,7 +175,10 @@ class ChatEngine:
                         break
                     try:
                         chunk = json.loads(data_str)
-                        delta = chunk.get("choices", [{}])[0].get("delta", {})
+                        choices = chunk.get("choices", [])
+                        if not choices:
+                            continue
+                        delta = choices[0].get("delta", {})
                         content = delta.get("content", "")
                         if content:
                             yield content

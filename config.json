@@ -1,7 +1,7 @@
 {
   "llm": {
     "base_url": "https://api.quickrouter.ai/v1",
-    "api_key": "",
+    "api_key": "sk-1kol96TyvCAwXXACj5PUe3qF5iPogZF3iKpED1LjmOeJXJxO",
     "model": "gpt-4o-mini"
   },
   "graphify_bin": "/Users/weidaicheng/.local/bin/graphify",
