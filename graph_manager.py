@@ -10,62 +10,61 @@ from database import Database
 class GraphManager:
     def __init__(self, db: Database):
         self.db = db
-        self._cache: dict[str, dict] = {}  # graph_id → parsed graph data
+        self._cache: dict[str, dict] = {}  # "owner/name" → parsed graph data
 
     # ── data loading ─────────────────────────────────────────
 
-    def load_graph(self, graph_id: str) -> dict | None:
-        """Load graph.json into memory cache."""
-        if graph_id in self._cache:
-            return self._cache[graph_id]
+    def _cache_key(self, owner: str, name: str) -> str:
+        return f"{owner}/{name}"
 
-        graph = self.db.get_graph(graph_id)
-        if not graph:
+    def load_graph(self, owner: str, name: str) -> dict | None:
+        """Load graph.json into memory cache."""
+        key = self._cache_key(owner, name)
+        if key in self._cache:
+            return self._cache[key]
+
+        repo = self.db.get_repo(owner, name)
+        if not repo or not repo.get("graph_json_path"):
             return None
 
-        path = Path(graph["graph_json_path"])
+        path = Path(repo["graph_json_path"])
         if not path.exists():
             return None
 
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            self._cache[graph_id] = data
+            self._cache[key] = data
             return data
         except Exception:
             return None
 
-    def invalidate_cache(self, graph_id: str):
-        self._cache.pop(graph_id, None)
+    def invalidate_cache(self, owner: str, name: str):
+        self._cache.pop(self._cache_key(owner, name), None)
 
     # ── stats ────────────────────────────────────────────────
 
-    def get_stats(self, graph_id: str) -> dict | None:
-        data = self.load_graph(graph_id)
+    def get_stats(self, owner: str, name: str) -> dict | None:
+        data = self.load_graph(owner, name)
         if not data:
             return None
 
         nodes = data.get("nodes", [])
         links = data.get("links", [])
 
-        # File type distribution
         file_types = dict(Counter(n.get("file_type", "unknown") for n in nodes))
 
-        # Community distribution
         communities = Counter()
         community_names = {}
         for n in nodes:
             c = n.get("community")
             if c is not None:
                 communities[c] += 1
-                name = n.get("community_name", "")
-                if name and not name.startswith("Community "):
-                    community_names[c] = name
+                cname = n.get("community_name", "")
+                if cname and not cname.startswith("Community "):
+                    community_names[c] = cname
 
-        # Edge relation distribution
         relations = dict(Counter(l.get("relation", "unknown") for l in links))
-
-        # Confidence distribution
         confidence = dict(Counter(l.get("confidence", "unknown") for l in links))
 
         return {
@@ -89,38 +88,35 @@ class GraphManager:
 
     def get_d3_data(
         self,
-        graph_id: str,
+        owner: str,
+        name: str,
         max_nodes: int = 500,
         community_filter: int | None = None,
         file_type_filter: str | None = None,
     ) -> dict | None:
-        data = self.load_graph(graph_id)
+        data = self.load_graph(owner, name)
         if not data:
             return None
 
         nodes = data.get("nodes", [])
         links = data.get("links", [])
 
-        # Apply filters
         if community_filter is not None:
             nodes = [n for n in nodes if n.get("community") == community_filter]
         if file_type_filter:
             nodes = [n for n in nodes if n.get("file_type") == file_type_filter]
 
-        # If too many nodes, keep top communities
         if len(nodes) > max_nodes and community_filter is None:
             comm_sizes = Counter(n.get("community", -1) for n in nodes)
             top_comms = {c for c, _ in comm_sizes.most_common(20)}
             nodes = [n for n in nodes if n.get("community") in top_comms]
 
-        # Build node ID set for link filtering
         node_ids = {n["id"] for n in nodes}
         links = [
             l for l in links
             if l.get("source") in node_ids and l.get("target") in node_ids
         ]
 
-        # Compute degree
         degree = Counter()
         for l in links:
             degree[l["source"]] += 1
@@ -155,8 +151,8 @@ class GraphManager:
 
     # ── god nodes ────────────────────────────────────────────
 
-    def get_god_nodes(self, graph_id: str, top_n: int = 10) -> list[dict]:
-        data = self.load_graph(graph_id)
+    def get_god_nodes(self, owner: str, name: str, top_n: int = 10) -> list[dict]:
+        data = self.load_graph(owner, name)
         if not data:
             return []
 
@@ -168,7 +164,6 @@ class GraphManager:
             degree[l["source"]] += 1
             degree[l["target"]] += 1
 
-        # Sort by degree
         ranked = sorted(nodes, key=lambda n: degree.get(n["id"], 0), reverse=True)
 
         result = []
@@ -186,22 +181,20 @@ class GraphManager:
 
     # ── node detail ──────────────────────────────────────────
 
-    def get_node_detail(self, graph_id: str, node_id: str) -> dict | None:
-        data = self.load_graph(graph_id)
+    def get_node_detail(self, owner: str, name: str, node_id: str) -> dict | None:
+        data = self.load_graph(owner, name)
         if not data:
             return None
 
         nodes = data.get("nodes", [])
         links = data.get("links", [])
 
-        # Find the node
         node = None
         for n in nodes:
             if n["id"] == node_id:
                 node = n
                 break
         if not node:
-            # Try by label
             for n in nodes:
                 if n.get("label") == node_id:
                     node = n
@@ -209,7 +202,6 @@ class GraphManager:
         if not node:
             return None
 
-        # Find neighbors
         neighbor_ids = set()
         node_links = []
         for l in links:
@@ -251,8 +243,8 @@ class GraphManager:
 
     # ── communities ──────────────────────────────────────────
 
-    def get_communities(self, graph_id: str) -> list[dict]:
-        data = self.load_graph(graph_id)
+    def get_communities(self, owner: str, name: str) -> list[dict]:
+        data = self.load_graph(owner, name)
         if not data:
             return []
 
@@ -264,9 +256,9 @@ class GraphManager:
             c = n.get("community")
             if c is not None:
                 comm_counts[c] += 1
-                name = n.get("community_name", "")
-                if name and not name.startswith("Community "):
-                    comm_names[c] = name
+                cname = n.get("community_name", "")
+                if cname and not cname.startswith("Community "):
+                    comm_names[c] = cname
 
         result = []
         for cid, count in comm_counts.most_common():
@@ -276,19 +268,3 @@ class GraphManager:
                 "count": count,
             })
         return result
-
-    # ── cleanup ──────────────────────────────────────────────
-
-    def delete_graph(self, graph_id: str) -> dict:
-        graph = self.db.get_graph(graph_id)
-        if not graph:
-            return {"error": "图谱不存在"}
-
-        # Delete file
-        path = Path(graph["graph_json_path"])
-        if path.exists():
-            path.unlink(missing_ok=True)
-
-        self.invalidate_cache(graph_id)
-        self.db.delete_graph(graph_id)
-        return {"ok": True, "name": graph["name"]}

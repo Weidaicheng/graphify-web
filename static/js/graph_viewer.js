@@ -67,7 +67,7 @@ async function loadGraphData() {
     if (ftFilter) params.set('file_type', ftFilter);
 
     try {
-        const data = await apiFetch(`/api/graphs/${GRAPH_ID}/d3-data?${params}`);
+        const data = await apiFetch(`/api/repos/${REPO_OWNER}/${REPO_NAME}/d3-data?${params}`);
         nodesData = data.nodes;
         linksData = data.links;
         render();
@@ -231,7 +231,7 @@ async function showNodeDetail(d) {
     `;
 
     try {
-        const detail = await apiFetch(`/api/graphs/${GRAPH_ID}/node/${encodeURIComponent(d.id)}`);
+        const detail = await apiFetch(`/api/repos/${REPO_OWNER}/${REPO_NAME}/node/${encodeURIComponent(d.id)}`);
         const list = document.getElementById('neighbor-list');
         if (detail.neighbors && detail.neighbors.length > 0) {
             list.innerHTML = detail.neighbors.map(n =>

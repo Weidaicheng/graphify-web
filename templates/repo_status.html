@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}{{ owner }}/{{ name }} — Graphify{% endblock %}
+
+{% block breadcrumb %}
+<span class="text-slate-500 mx-2">/</span>
+<span class="text-slate-400 text-sm">{{ owner }}</span>
+<span class="text-slate-600 mx-1">/</span>
+<span class="text-white text-sm font-medium">{{ name }}</span>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto px-6 py-12">
+    <!-- Repo header -->
+    <div class="mb-8">
+        <h1 class="text-2xl font-bold text-white flex items-center gap-3">
+            <svg class="w-7 h-7 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                      d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+            </svg>
+            <a href="https://github.com/{{ owner }}/{{ name }}" target="_blank"
+               class="hover:text-emerald-400 transition-colors">{{ owner }}/{{ name }}</a>
+        </h1>
+        <p class="text-slate-500 text-sm mt-1">代码知识图谱</p>
+    </div>
+
+    <!-- Status card -->
+    <div id="status-card" class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+        {% if not repo %}
+        {# ── State 1: No graph ── #}
+        <div class="text-center py-6">
+            <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-slate-800 flex items-center justify-center">
+                <svg class="w-8 h-8 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                          d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                </svg>
+            </div>
+            <h2 class="text-lg font-semibold text-white mb-2">尚未生成图谱</h2>
+            <p class="text-slate-400 text-sm mb-6">点击下方按钮克隆仓库并构建知识图谱</p>
+            <button id="build-btn" onclick="startBuild()"
+                    class="btn-primary px-8 py-2.5 text-sm font-medium">
+                生成图谱
+            </button>
+        </div>
+
+        {% elif repo.status == 'building' or repo.status == 'pending' %}
+        {# ── State: Building ── #}
+        <div class="py-4">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="animate-spin w-5 h-5 border-2 border-emerald-400 border-t-transparent rounded-full"></div>
+                <h2 class="text-lg font-semibold text-white">正在构建图谱…</h2>
+            </div>
+            <div id="build-log" class="bg-dark-900 rounded-lg p-4 text-xs font-mono text-slate-400 max-h-64 overflow-y-auto whitespace-pre-wrap">
+                等待构建输出…
+            </div>
+        </div>
+
+        {% elif repo.status == 'error' %}
+        {# ── State: Error ── #}
+        <div class="text-center py-6">
+            <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-red-500/10 flex items-center justify-center">
+                <span class="text-red-400 text-2xl">!</span>
+            </div>
+            <h2 class="text-lg font-semibold text-white mb-2">构建失败</h2>
+            <p class="text-red-400/80 text-sm mb-4 font-mono">{{ repo.error_message or '未知错误' }}</p>
+            <button onclick="startBuild()" class="btn-primary px-8 py-2.5 text-sm font-medium">
+                重试
+            </button>
+        </div>
+
+        {% elif repo.status == 'ready' %}
+        {# ── State 2/3: Ready or Outdated ── #}
+        <div class="py-2">
+            {% if is_outdated %}
+            <div class="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                <span class="text-amber-400 text-sm">⚠</span>
+                <span class="text-amber-300 text-sm">仓库有新的提交，图谱可能不是最新的</span>
+            </div>
+            {% else %}
+            <div class="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                <span class="text-emerald-400 text-sm">✓</span>
+                <span class="text-emerald-300 text-sm">图谱已是最新</span>
+            </div>
+            {% endif %}
+
+            <!-- Stats -->
+            <div class="grid grid-cols-3 gap-4 mb-6">
+                <div class="bg-slate-800/50 rounded-lg p-3 text-center">
+                    <div class="text-xl font-bold text-white">{{ repo.node_count }}</div>
+                    <div class="text-xs text-slate-500">节点</div>
+                </div>
+                <div class="bg-slate-800/50 rounded-lg p-3 text-center">
+                    <div class="text-xl font-bold text-white">{{ repo.link_count }}</div>
+                    <div class="text-xs text-slate-500">关系</div>
+                </div>
+                <div class="bg-slate-800/50 rounded-lg p-3 text-center">
+                    <div class="text-xl font-bold text-white">{{ repo.community_count }}</div>
+                    <div class="text-xs text-slate-500">社区</div>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex gap-3">
+                <a href="/{{ owner }}/{{ name }}/graph"
+                   class="btn-primary flex-1 text-center py-2.5 text-sm font-medium">
+                    查看图谱
+                </a>
+                <a href="/{{ owner }}/{{ name }}/chat"
+                   class="btn-secondary flex-1 text-center py-2.5 text-sm font-medium">
+                    AI 对话
+                </a>
+                {% if is_outdated %}
+                <button onclick="startUpdate()" id="update-btn"
+                        class="btn-secondary py-2.5 px-4 text-sm font-medium text-amber-400 border-amber-500/30 hover:bg-amber-500/10">
+                    更新
+                </button>
+                {% endif %}
+            </div>
+
+            <!-- Meta info -->
+            <div class="mt-4 text-xs text-slate-600 flex gap-4">
+                <span>更新于 {{ repo.updated_at }}</span>
+                {% if repo.last_built_sha %}
+                <span>commit: {{ repo.last_built_sha[:7] }}</span>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+const OWNER = "{{ owner }}";
+const NAME = "{{ name }}";
+
+async function startBuild() {
+    const btn = document.getElementById('build-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '构建中…'; }
+    try {
+        await apiFetch(`/api/repos/${OWNER}/${NAME}/build`, { method: 'POST' });
+        pollJob();
+    } catch (e) {
+        if (btn) { btn.disabled = false; btn.textContent = '生成图谱'; }
+    }
+}
+
+async function startUpdate() {
+    const btn = document.getElementById('update-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '更新中…'; }
+    try {
+        await apiFetch(`/api/repos/${OWNER}/${NAME}/update`, { method: 'POST' });
+        pollJob();
+    } catch (e) {
+        if (btn) { btn.disabled = false; btn.textContent = '更新'; }
+    }
+}
+
+let pollTimer = null;
+function pollJob() {
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(async () => {
+        try {
+            const job = await apiFetch(`/api/jobs/${OWNER}/${NAME}`);
+            const logEl = document.getElementById('build-log');
+            if (logEl && job.log_output) logEl.textContent = job.log_output;
+            if (job.status === 'completed' || job.status === 'failed') {
+                clearInterval(pollTimer);
+                setTimeout(() => location.reload(), 1000);
+            }
+        } catch (e) { /* retry */ }
+    }, 2000);
+}
+
+// Auto-start polling if status is building
+{% if repo and repo.status in ('building', 'pending') %}
+pollJob();
+{% endif %}
+</script>
+{% endblock %}

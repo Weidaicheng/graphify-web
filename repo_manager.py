@@ -2,12 +2,11 @@
 
 import asyncio
 import json
-import re
 import shutil
-from collections import Counter
 from pathlib import Path
 
 from database import Database
+from github_api import GitHubAPI
 
 
 class RepoManager:
@@ -19,56 +18,46 @@ class RepoManager:
 
     # ── public API ───────────────────────────────────────────
 
-    async def clone_and_build(self, github_url: str) -> dict:
+    async def clone_and_build(self, owner: str, name: str) -> dict:
         """Full pipeline: clone repo → build graph. Returns repo dict."""
-        # Check duplicate
-        existing = self.db.get_repo_by_url(github_url)
-        if existing:
-            return {"error": f"仓库已存在: {existing['name']}", "repo": existing}
+        github_url = f"https://github.com/{owner}/{name}"
+        local_path = str(self.repos_dir / f"{owner}_{name}")
 
-        name = self._extract_repo_name(github_url)
-        local_path = str(self.repos_dir / name.replace("/", "_"))
+        # Create or reset repo record
+        repo = self.db.add_repo(owner=owner, name=name, local_path=local_path)
 
-        # Create repo record
-        repo = self.db.add_repo(name=name, github_url=github_url, local_path=local_path)
+        # Get latest commit SHA before cloning
+        commit_sha = await GitHubAPI.get_latest_commit(owner, name)
 
         # Clone
-        job = self.db.add_job(repo["id"], "clone")
+        job = self.db.add_job(owner, name, "clone")
         rc, output = await self._run_graphify(
             [self.graphify_bin, "clone", github_url, "--out", local_path],
             job["id"],
         )
         if rc != 0:
-            self.db.update_repo(repo["id"], status="error")
+            self.db.update_repo(owner, name, status="error", error_message=f"克隆失败: {output[-500:]}")
             self.db.update_job(job["id"], status="failed", finished_at=Database._now())
             return {"error": f"克隆失败: {output[-500:]}", "repo": repo}
 
         self.db.update_job(job["id"], status="completed", finished_at=Database._now())
-        self.db.update_repo(repo["id"], status="ready", local_path=local_path)
+        self.db.update_repo(owner, name, status="ready", local_path=local_path)
 
         # Build graph
-        return await self.build_graph(repo["id"])
+        return await self.build_graph(owner, name, commit_sha=commit_sha)
 
-    async def build_graph(self, repo_id: str) -> dict:
+    async def build_graph(self, owner: str, name: str, commit_sha: str = None) -> dict:
         """Run full graphify pipeline on a cloned repo."""
-        repo = self.db.get_repo(repo_id)
+        repo = self.db.get_repo(owner, name)
         if not repo:
             return {"error": "仓库不存在"}
-        if repo["status"] == "cloning":
-            return {"error": "仓库正在克隆中"}
+        if repo["status"] == "building":
+            return {"error": "仓库正在构建中"}
 
-        self.db.update_repo(repo_id, status="building")
-
-        # Create graph record
-        graph = self.db.add_graph(
-            repo_id=repo_id,
-            name=repo["name"],
-            graph_json_path="",  # will be updated after build
-        )
-        self.db.update_graph(graph["id"], status="building")
+        self.db.update_repo(owner, name, status="building", error_message=None)
 
         # Create job
-        job = self.db.add_job(repo_id, "build")
+        job = self.db.add_job(owner, name, "build")
 
         # Run graphify pipeline
         rc, output = await self._run_graphify(
@@ -77,17 +66,15 @@ class RepoManager:
         )
 
         if rc != 0:
-            self.db.update_repo(repo_id, status="error")
-            self.db.update_graph(graph["id"], status="error", error_message=output[-500:])
+            self.db.update_repo(owner, name, status="error", error_message=output[-500:])
             self.db.update_job(job["id"], status="failed", finished_at=Database._now())
-            return {"error": f"构建失败: {output[-500:]}", "graph": graph}
+            return {"error": f"构建失败: {output[-500:]}"}
 
         self.db.update_job(job["id"], status="completed", finished_at=Database._now())
 
         # Find graph.json in graphify-out directory
         graph_json = Path(repo["local_path"]) / "graphify-out" / "graph.json"
         if not graph_json.exists():
-            # Try alternative locations
             for candidate in [
                 Path(repo["local_path"]) / "graph.json",
                 Path("graphify-out") / "graph.json",
@@ -97,68 +84,78 @@ class RepoManager:
                     break
 
         if not graph_json.exists():
-            self.db.update_graph(graph["id"], status="error", error_message="graph.json not found")
-            self.db.update_repo(repo_id, status="error")
+            self.db.update_repo(owner, name, status="error", error_message="graph.json not found")
             return {"error": "构建完成但未找到 graph.json"}
 
-        # Parse stats and update graph record
+        # Parse stats and update repo record
         stats = self._parse_graph_stats(graph_json)
-        self.db.update_graph(
-            graph["id"],
+
+        # Get commit SHA if not provided
+        if commit_sha is None:
+            commit_sha = await GitHubAPI.get_latest_commit(owner, name)
+
+        self.db.update_repo(
+            owner, name,
             status="ready",
             graph_json_path=str(graph_json),
             node_count=stats["node_count"],
             link_count=stats["link_count"],
             community_count=stats["community_count"],
+            last_commit_sha=commit_sha,
+            last_built_sha=commit_sha,
+            error_message=None,
         )
-        self.db.update_repo(repo_id, status="ready")
 
-        return self.db.get_graph(graph["id"])
+        return self.db.get_repo(owner, name)
 
-    async def update_graph(self, repo_id: str) -> dict:
+    async def update_graph(self, owner: str, name: str) -> dict:
         """Incremental update: graphify --update."""
-        repo = self.db.get_repo(repo_id)
+        repo = self.db.get_repo(owner, name)
         if not repo:
             return {"error": "仓库不存在"}
+        if not repo.get("graph_json_path"):
+            return await self.build_graph(owner, name)
 
-        graphs = self.db.list_graphs_by_repo(repo_id)
-        if not graphs:
-            return await self.build_graph(repo_id)
+        self.db.update_repo(owner, name, status="building", error_message=None)
 
-        graph = graphs[0]  # latest graph
-        self.db.update_graph(graph["id"], status="building")
-
-        job = self.db.add_job(repo_id, "update")
+        job = self.db.add_job(owner, name, "update")
         rc, output = await self._run_graphify(
             [self.graphify_bin, repo["local_path"], "--update"],
             job["id"],
         )
 
         if rc != 0:
-            self.db.update_graph(graph["id"], status="error", error_message=output[-500:])
+            self.db.update_repo(owner, name, status="error", error_message=output[-500:])
             self.db.update_job(job["id"], status="failed", finished_at=Database._now())
             return {"error": f"更新失败: {output[-500:]}"}
 
         self.db.update_job(job["id"], status="completed", finished_at=Database._now())
 
         # Re-parse stats
-        graph_json = Path(graph["graph_json_path"])
+        graph_json = Path(repo["graph_json_path"])
         if graph_json.exists():
             stats = self._parse_graph_stats(graph_json)
-            self.db.update_graph(
-                graph["id"],
-                status="ready",
-                node_count=stats["node_count"],
-                link_count=stats["link_count"],
-                community_count=stats["community_count"],
-            )
+        else:
+            stats = {"node_count": 0, "link_count": 0, "community_count": 0}
 
-        self.db.update_repo(repo_id, status="ready")
-        return self.db.get_graph(graph["id"])
+        # Get latest commit SHA
+        commit_sha = await GitHubAPI.get_latest_commit(owner, name)
 
-    async def delete_repo(self, repo_id: str) -> dict:
-        """Delete repo, associated graphs, and local files."""
-        repo = self.db.get_repo(repo_id)
+        self.db.update_repo(
+            owner, name,
+            status="ready",
+            node_count=stats["node_count"],
+            link_count=stats["link_count"],
+            community_count=stats["community_count"],
+            last_commit_sha=commit_sha,
+            last_built_sha=commit_sha,
+            error_message=None,
+        )
+        return self.db.get_repo(owner, name)
+
+    async def delete_repo(self, owner: str, name: str) -> dict:
+        """Delete repo local files and DB record."""
+        repo = self.db.get_repo(owner, name)
         if not repo:
             return {"error": "仓库不存在"}
 
@@ -167,15 +164,8 @@ class RepoManager:
         if local_path.exists():
             shutil.rmtree(local_path, ignore_errors=True)
 
-        # Delete graph files
-        for graph in self.db.list_graphs_by_repo(repo_id):
-            graph_path = Path(graph["graph_json_path"])
-            if graph_path.exists():
-                graph_path.unlink(missing_ok=True)
-            self.db.delete_graph(graph["id"])
-
-        self.db.delete_repo(repo_id)
-        return {"ok": True, "name": repo["name"]}
+        self.db.delete_repo(owner, name)
+        return {"ok": True, "owner": owner, "name": name}
 
     # ── internals ────────────────────────────────────────────
 
@@ -198,7 +188,6 @@ class RepoManager:
                 break
             text = line.decode("utf-8", errors="replace")
             output_lines.append(text)
-            # Update job log incrementally (every 10 lines to reduce DB writes)
             if len(output_lines) % 10 == 0:
                 self.db.update_job(job_id, log_output="".join(output_lines))
 
@@ -225,18 +214,5 @@ class RepoManager:
                 "link_count": len(links),
                 "community_count": len(communities),
             }
-        except Exception as e:
+        except Exception:
             return {"node_count": 0, "link_count": 0, "community_count": 0}
-
-    @staticmethod
-    def _extract_repo_name(github_url: str) -> str:
-        """Extract 'owner/repo' from a GitHub URL."""
-        # Handle: https://github.com/owner/repo.git, https://github.com/owner/repo
-        m = re.search(r"github\.com[:/]([^/]+/[^/.]+?)(?:\.git)?$", github_url)
-        if m:
-            return m.group(1)
-        # Fallback: use last two path segments
-        parts = github_url.rstrip("/").split("/")
-        if len(parts) >= 2:
-            return f"{parts[-2]}/{parts[-1].replace('.git', '')}"
-        return github_url

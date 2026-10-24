@@ -1,7 +1,6 @@
 /* chat.js — SSE streaming chat interface */
 
 let chatHistory = [];
-let currentGraphId = GRAPH_ID;
 let isStreaming = false;
 
 // ── Send message ───────────────────────────────────────────
@@ -29,7 +28,7 @@ async function sendMessage(e) {
     let fullText = '';
 
     try {
-        const response = await fetch(`/api/chat/${currentGraphId}`, {
+        const response = await fetch(`/api/repos/${REPO_OWNER}/${REPO_NAME}/chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -183,20 +182,6 @@ function toggleContext() {
 function askSuggestion(text) {
     document.getElementById('chat-input').value = text;
     sendMessage();
-}
-
-// ── Switch graph ───────────────────────────────────────────
-
-function switchGraph(graphId) {
-    currentGraphId = graphId;
-    chatHistory = [];
-    // Clear messages except first
-    const container = document.getElementById('chat-messages');
-    container.innerHTML = '';
-    // Re-add welcome
-    appendMessage('assistant', '已切换到新的图谱。你可以开始提问了。');
-    // Hide context
-    document.getElementById('context-panel')?.classList.add('hidden');
 }
 
 // ── Markdown renderer (simple, Mermaid-aware) ──────────────

@@ -152,7 +152,7 @@ Vocabulary:
 
     # ── Main chat flow ─────────────────────────────────────────
 
-    async def chat_stream(self, graph_id: str, query: str, history: list[dict] = None):
+    async def chat_stream(self, owner: str, name: str, query: str, history: list[dict] = None):
         """
         Generator yielding SSE event dicts:
         {"type": "expansion", "tokens": [...], "mode": "bfs"|"dfs"} → query expansion result
@@ -161,13 +161,17 @@ Vocabulary:
         {"type": "done"} → stream complete
         {"type": "error", "message": "..."} → error
         """
-        graph = self.graph_mgr.db.get_graph(graph_id)
-        if not graph:
-            yield {"type": "error", "message": "图谱不存在"}
+        repo = self.graph_mgr.db.get_repo(owner, name)
+        if not repo:
+            yield {"type": "error", "message": "仓库不存在"}
             return
 
-        graph_json_path = graph["graph_json_path"]
-        repo_name = graph.get("name", "unknown")
+        graph_json_path = repo.get("graph_json_path")
+        if not graph_json_path:
+            yield {"type": "error", "message": "图谱尚未构建"}
+            return
+
+        repo_name = f"{owner}/{name}"
 
         # Step 0: Query expansion
         vocab = self._extract_vocab(graph_json_path)
@@ -198,7 +202,7 @@ Vocabulary:
         )
 
         # Get god nodes for architectural context
-        god_nodes = self.graph_mgr.get_god_nodes(graph_id, top_n=10)
+        god_nodes = self.graph_mgr.get_god_nodes(owner, name, top_n=10)
 
         # Yield context event
         yield {

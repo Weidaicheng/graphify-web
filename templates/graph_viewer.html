@@ -1,11 +1,20 @@
 {% extends "base.html" %}
-{% block title %}{{ graph.name }} — 图谱查看器{% endblock %}
+{% block title %}{{ owner }}/{{ name }} — 图谱查看器{% endblock %}
+
+{% block breadcrumb %}
+<span class="text-slate-500 mx-2">/</span>
+<a href="/{{ owner }}/{{ name }}" class="text-slate-400 text-sm hover:text-white">{{ owner }}</a>
+<span class="text-slate-600 mx-1">/</span>
+<a href="/{{ owner }}/{{ name }}" class="text-slate-400 text-sm hover:text-white">{{ name }}</a>
+<span class="text-slate-600 mx-1">/</span>
+<span class="text-emerald-400 text-sm font-medium">graph</span>
+{% endblock %}
 
 {% block head %}
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <style>
     html, body { height: 100%; overflow: hidden; }
-    main { height: 100%; overflow: hidden; }
+    main { height: calc(100vh - 3rem); overflow: hidden; }
 </style>
 {% endblock %}
 
@@ -17,11 +26,11 @@
     <!-- Left panel: filters -->
     <aside id="viewer-sidebar" class="w-52 lg:w-60 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0 overflow-y-auto transition-all duration-200 hidden lg:flex">
         <div class="p-4 border-b border-slate-800">
-            <a href="/graphs" class="text-xs text-slate-500 hover:text-slate-300 mb-2 inline-block">← 返回列表</a>
-            <h2 class="text-sm font-bold text-white truncate" title="{{ graph.name }}">{{ graph.name }}</h2>
+            <a href="/{{ owner }}/{{ name }}" class="text-xs text-slate-500 hover:text-slate-300 mb-2 inline-block">← 返回</a>
+            <h2 class="text-sm font-bold text-white truncate" title="{{ owner }}/{{ name }}">{{ owner }}/{{ name }}</h2>
             <p class="text-xs text-slate-500 mt-0.5">
-                {{ stats.node_count if stats else graph.node_count }} 节点 ·
-                {{ stats.link_count if stats else graph.link_count }} 边
+                {{ stats.node_count if stats else repo.node_count }} 节点 ·
+                {{ stats.link_count if stats else repo.link_count }} 边
             </p>
         </div>
 
@@ -76,8 +85,8 @@
 
         <!-- Chat link -->
         <div class="p-4 border-t border-slate-800">
-            <a href="/chat/{{ graph.id }}" class="btn-secondary w-full text-center block text-sm">
-                💬 与此图谱对话
+            <a href="/{{ owner }}/{{ name }}/chat" class="btn-secondary w-full text-center block text-sm">
+                💬 AI 对话
             </a>
         </div>
     </aside>
@@ -114,7 +123,8 @@
     </aside>
 </div>
 
-<script>const GRAPH_ID = "{{ graph.id }}";
+<script>const REPO_OWNER = "{{ owner }}";
+const REPO_NAME = "{{ name }}";
 
 function toggleSidebar() {
     const sidebar = document.getElementById('viewer-sidebar');

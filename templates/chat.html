@@ -1,10 +1,19 @@
 {% extends "base.html" %}
-{% block title %}对话 — {{ graph.name }}{% endblock %}
+{% block title %}对话 — {{ owner }}/{{ name }}{% endblock %}
+
+{% block breadcrumb %}
+<span class="text-slate-500 mx-2">/</span>
+<a href="/{{ owner }}/{{ name }}" class="text-slate-400 text-sm hover:text-white">{{ owner }}</a>
+<span class="text-slate-600 mx-1">/</span>
+<a href="/{{ owner }}/{{ name }}" class="text-slate-400 text-sm hover:text-white">{{ name }}</a>
+<span class="text-slate-600 mx-1">/</span>
+<span class="text-emerald-400 text-sm font-medium">chat</span>
+{% endblock %}
 
 {% block head %}
 <style>
     html, body { height: 100%; overflow: hidden; }
-    main { height: 100%; overflow: hidden; }
+    main { height: calc(100vh - 3rem); overflow: hidden; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script>
@@ -27,40 +36,19 @@
 
 {% block content %}
 <div class="flex h-full w-full overflow-hidden">
-    <!-- Sidebar: graph selector -->
-    <aside class="w-52 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0">
-        <div class="p-4 border-b border-slate-800">
-            <h2 class="text-sm font-bold text-white">图谱对话</h2>
-            <p class="text-xs text-slate-500 mt-0.5">基于知识图谱的问答</p>
-        </div>
-        <div class="p-3 flex-1 overflow-y-auto">
-            <label class="text-xs text-slate-500 block mb-1 px-1">选择图谱</label>
-            <select id="graph-selector" class="input-field w-full text-sm mb-4" onchange="switchGraph(this.value)">
-                {% for g in graphs %}
-                <option value="{{ g.id }}" {% if g.id == graph.id %}selected{% endif %}>{{ g.name }}</option>
-                {% endfor %}
-            </select>
-            <div class="space-y-1">
-                <a href="/graphs/{{ graph.id }}" class="nav-item text-xs">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
-                    查看图谱
-                </a>
-                <a href="/graphs" class="nav-item text-xs">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
-                    所有图谱
-                </a>
-            </div>
-        </div>
-    </aside>
-
     <!-- Chat area -->
     <div class="flex-1 flex flex-col min-w-0">
         <!-- Header -->
-        <div class="px-6 py-3 border-b border-slate-800 bg-slate-900/50 shrink-0">
-            <h3 class="text-sm font-semibold text-white" id="chat-graph-name">{{ graph.name }}</h3>
-            <p class="text-xs text-slate-500">
-                {{ graph.node_count }} 节点 · {{ graph.link_count }} 边 · {{ graph.community_count }} 社区
-            </p>
+        <div class="px-6 py-3 border-b border-slate-800 bg-slate-900/50 shrink-0 flex items-center justify-between">
+            <div>
+                <h3 class="text-sm font-semibold text-white">{{ owner }}/{{ name }}</h3>
+                <p class="text-xs text-slate-500">
+                    {{ repo.node_count }} 节点 · {{ repo.link_count }} 边 · {{ repo.community_count }} 社区
+                </p>
+            </div>
+            <a href="/{{ owner }}/{{ name }}/graph" class="btn-secondary text-xs px-3 py-1.5">
+                查看图谱
+            </a>
         </div>
 
         <!-- Messages -->
@@ -71,7 +59,7 @@
                     <span class="text-xs text-slate-500">Graphify 助手</span>
                 </div>
                 <div class="chat-bubble-body">
-                    <p>你好！我是图谱分析助手。你可以问我关于这个代码仓库的任何问题，我会基于知识图谱来回答。</p>
+                    <p>你好！我是 <strong>{{ owner }}/{{ name }}</strong> 的图谱分析助手。你可以问我关于这个代码仓库的任何问题，我会基于知识图谱来回答。</p>
                     <p class="mt-2 text-sm opacity-70">试试问：</p>
                     <div class="mt-2 flex flex-wrap gap-2">
                         <button onclick="askSuggestion(this.textContent)" class="suggestion-chip">项目的核心架构是什么？</button>
@@ -109,7 +97,8 @@
     </div>
 </div>
 
-<script>const GRAPH_ID = "{{ graph.id }}";</script>
+<script>const REPO_OWNER = "{{ owner }}";
+const REPO_NAME = "{{ name }}";</script>
 {% endblock %}
 
 {% block scripts %}
