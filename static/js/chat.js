@@ -63,7 +63,9 @@ async function sendMessage(e) {
                 try {
                     const event = JSON.parse(dataStr);
 
-                    if (event.type === 'context') {
+                    if (event.type === 'expansion') {
+                        showExpansion(event);
+                    } else if (event.type === 'context') {
                         showContext(event);
                     } else if (event.type === 'token') {
                         fullText += event.content;
@@ -117,6 +119,28 @@ function appendMessage(role, text) {
 }
 
 // ── Context panel ──────────────────────────────────────────
+
+function showExpansion(event) {
+    const panel = document.getElementById('expansion-panel');
+    const content = document.getElementById('expansion-content');
+    if (!panel) return;
+    panel.classList.remove('hidden');
+
+    const tokens = event.tokens || [];
+    let html = '';
+    html += `<span class="text-slate-500">原始问题:</span> <span class="text-slate-300">${event.original}</span>`;
+    html += `<span class="mx-2 text-slate-600">→</span>`;
+    html += `<span class="text-slate-500">模式:</span> <span class="text-cyan-400 font-mono">${event.mode || 'bfs'}</span>`;
+    html += `<span class="mx-2 text-slate-600">·</span>`;
+    html += `<span class="text-slate-500">词汇表:</span> <span class="text-slate-400">${event.vocab_size || 0} tokens</span>`;
+    if (tokens.length > 0) {
+        html += `<br><span class="text-emerald-400">扩展为:</span> `;
+        html += tokens.map(t => `<span class="bg-emerald-500/15 text-emerald-300 px-1.5 py-0.5 rounded text-xs font-mono mr-1">${t}</span>`).join('');
+    } else {
+        html += `<br><span class="text-amber-400">未找到匹配词汇，使用原始查询</span>`;
+    }
+    content.innerHTML = html;
+}
 
 function showContext(event) {
     const panel = document.getElementById('context-panel');
