@@ -313,3 +313,20 @@ select.input-field {
 }
 .empty-state-text { color: #94a3b8; }
 .empty-state-hint { color: #64748b; font-size: 0.75rem; margin-top: 0.25rem; }
+
+/* ── Mermaid diagrams in chat ──────────────────── */
+.mermaid-rendered {
+    background: #0f172a;
+    border: 1px solid #1e293b;
+    border-radius: 0.75rem;
+    padding: 1rem;
+    display: flex;
+    justify-content: center;
+}
+.mermaid-rendered svg {
+    max-width: 100%;
+    height: auto;
+}
+.mermaid-source {
+    border-left: 3px solid #10b981;
+}

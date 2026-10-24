@@ -6,6 +6,23 @@
     html, body { height: 100%; overflow: hidden; }
     main { height: 100%; overflow: hidden; }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'dark',
+    securityLevel: 'loose',
+    flowchart: { curve: 'basis', padding: 10 },
+    themeVariables: {
+      primaryColor: '#1e293b',
+      primaryTextColor: '#e2e8f0',
+      primaryBorderColor: '#334155',
+      lineColor: '#475569',
+      secondaryColor: '#0f172a',
+      tertiaryColor: '#1e293b'
+    }
+  });
+</script>
 {% endblock %}
 
 {% block content %}

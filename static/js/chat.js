@@ -69,10 +69,18 @@ async function sendMessage(e) {
                         showContext(event);
                     } else if (event.type === 'token') {
                         fullText += event.content;
-                        bodyEl.innerHTML = renderMarkdown(fullText);
+                        // Show indicator when streaming a mermaid block
+                        const openM = (fullText.match(/```mermaid\n/g) || []).length;
+                        const closeM = (fullText.match(/```mermaid\n[\s\S]*?```/g) || []).length;
+                        let indicator = '';
+                        if (openM > closeM) {
+                            indicator = '<div class="text-xs text-emerald-400 animate-pulse mt-1">⏳ 正在生成图表…</div>';
+                        }
+                        bodyEl.innerHTML = renderMarkdown(fullText) + indicator;
                         scrollToBottom();
                     } else if (event.type === 'done') {
-                        // Stream complete
+                        // Stream complete — render any Mermaid diagrams
+                        await renderMermaidInElement(bodyEl);
                     } else if (event.type === 'error') {
                         bodyEl.innerHTML = `<p class="text-red-400">${event.message}</p>`;
                     }
@@ -191,15 +199,25 @@ function switchGraph(graphId) {
     document.getElementById('context-panel')?.classList.add('hidden');
 }
 
-// ── Markdown renderer (simple) ─────────────────────────────
+// ── Markdown renderer (simple, Mermaid-aware) ──────────────
 
 function renderMarkdown(text) {
     if (!text) return '';
-    return text
+
+    // Pass 1: Extract mermaid blocks with placeholders (preserve newlines)
+    const mermaidBlocks = [];
+    let processed = text.replace(/```mermaid\n([\s\S]*?)```/g, (match, diagram) => {
+        const idx = mermaidBlocks.length;
+        mermaidBlocks.push(diagram.trim());
+        return `\n%%MERMAID_${idx}%%\n`;
+    });
+
+    // Pass 2: Standard markdown rendering
+    processed = processed
         // Code blocks
-        .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre class="bg-dark-900 rounded p-2 my-1 overflow-x-auto text-xs"><code>$2</code></pre>')
+        .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre class="bg-slate-900 rounded-lg p-2 my-1 overflow-x-auto text-xs"><code>$2</code></pre>')
         // Inline code
-        .replace(/`([^`]+)`/g, '<code class="bg-dark-900 px-1 rounded text-xs">$1</code>')
+        .replace(/`([^`]+)`/g, '<code class="bg-slate-800 px-1 rounded text-xs">$1</code>')
         // Bold
         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
         // Headers
@@ -212,6 +230,60 @@ function renderMarkdown(text) {
         // Line breaks
         .replace(/\n\n/g, '</p><p class="mt-2">')
         .replace(/\n/g, '<br>');
+
+    // Pass 3: Restore mermaid blocks with preserved newlines
+    processed = processed.replace(/%%MERMAID_(\d+)%%/g, (match, idx) => {
+        const source = mermaidBlocks[parseInt(idx)];
+        return `<pre class="mermaid-source bg-slate-900 rounded-lg p-3 my-2 overflow-x-auto text-xs text-emerald-300 border border-emerald-500/20 border-l-[3px]"><code>${source}</code></pre>`;
+    });
+
+    return processed;
+}
+
+// ── Mermaid rendering ──────────────────────────────────────
+
+let mermaidCounter = 0;
+
+function sanitizeMermaidSource(source) {
+    // Auto-quote unquoted node labels that contain special chars (colons, parens, etc.)
+    // Matches patterns like: A[unquoted label] → A["quoted label"]
+    return source.replace(/(\w+)(\[)([^\]"]*?[():\u4e00-\u9fff][^\]]*?)(\])/g, (match, id, open, label, close) => {
+        // Only quote if not already quoted
+        if (label.startsWith('"') && label.endsWith('"')) return match;
+        return `${id}${open}"${label}"${close}`;
+    });
+}
+
+async function renderMermaidInElement(containerEl) {
+    if (typeof mermaid === 'undefined') return;
+    const mermaidPres = containerEl.querySelectorAll('pre.mermaid-source');
+    if (mermaidPres.length === 0) return;
+
+    for (const pre of mermaidPres) {
+        const source = pre.querySelector('code')?.textContent || pre.textContent;
+        const sanitized = sanitizeMermaidSource(source);
+        const id = `mermaid-${Date.now()}-${++mermaidCounter}`;
+
+        try {
+            const { svg } = await mermaid.render(id, sanitized);
+            const wrapper = document.createElement('div');
+            wrapper.className = 'mermaid-rendered my-3 overflow-x-auto rounded-lg';
+            wrapper.innerHTML = svg;
+            pre.replaceWith(wrapper);
+        } catch (err) {
+            // If Mermaid fails to parse, leave the source visible with warning
+            pre.classList.add('border-red-500/30');
+            pre.classList.remove('border-emerald-500/20');
+            const warning = document.createElement('div');
+            warning.className = 'text-xs text-red-400 mt-1 mb-2';
+            warning.textContent = '⚠ 图表渲染失败，显示源码：';
+            pre.before(warning);
+            // Clean up any leftover mermaid temp elements
+            const tempEl = document.getElementById('d' + id);
+            if (tempEl) tempEl.remove();
+            console.warn('Mermaid render error:', err);
+        }
+    }
 }
 
 // ── Utilities ──────────────────────────────────────────────

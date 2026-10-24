@@ -38,6 +38,7 @@ class ChatEngine:
         self.base_url = llm_config.get("base_url", "https://api.quickrouter.ai/v1")
         self.api_key = llm_config.get("api_key", "")
         self.model = llm_config.get("model", "gpt-4o-mini")
+        self.model_fast = llm_config.get("model_fast", self.model)
         self.graphify_bin = graphify_bin
         # Vocabulary cache: graph_json_path → sorted token list
         self._vocab_cache: dict[str, list[str]] = {}
@@ -137,6 +138,18 @@ Vocabulary:
                 return "dfs"
         return "bfs"
 
+    def _should_suggest_diagram(self, question: str) -> bool:
+        """Detect if the query is likely to benefit from a Mermaid flow diagram."""
+        diagram_keywords = [
+            "架构", "流程", "调用链", "链路", "依赖", "数据流",
+            "怎么工作", "如何工作", "怎么实现", "如何调用",
+            "architecture", "flow", "pipeline", "chain", "how does",
+            "模块关系", "组件关系", "拓扑", "结构",
+            "入口", "出口", "路由", "转发", "调用",
+        ]
+        q_lower = question.lower()
+        return any(kw in q_lower for kw in diagram_keywords)
+
     # ── Main chat flow ─────────────────────────────────────────
 
     async def chat_stream(self, graph_id: str, query: str, history: list[dict] = None):
@@ -204,7 +217,12 @@ Vocabulary:
         if history:
             for msg in history[-10:]:
                 messages.append({"role": msg["role"], "content": msg["content"]})
-        messages.append({"role": "user", "content": query})
+
+        # Add diagram hint for architecture/flow queries
+        user_content = query
+        if self._should_suggest_diagram(query):
+            user_content += "\n\n[提示：此问题适合用 Mermaid 流程图回答。如果图谱中有足够的关系信息，请生成 ```mermaid 代码块来展示流程或架构]"
+        messages.append({"role": "user", "content": user_content})
 
         # Step 4: Call LLM with streaming
         if not self.api_key:
@@ -296,7 +314,18 @@ Vocabulary:
 5. 区分确定性：EXTRACTED（源码直接提取）> INFERRED（推断）> AMBIGUOUS（不确定）
 6. 如果图谱中没有相关信息，明确说明
 7. 使用中文回答
-8. 回答要有条理，使用列表和结构化格式"""
+8. 回答要有条理，使用列表和结构化格式
+9. 当问题涉及架构流程、调用链路、模块依赖、数据流向时，使用 Mermaid 语法生成流程图。格式：用 ```mermaid 代码块包裹，使用 flowchart TD 或 graph LR。节点 ID 使用英文字母，节点标签必须用双引号包裹（因为标签中可能包含冒号、括号等特殊字符）。示例：
+```mermaid
+flowchart TD
+    A["用户请求"] --> B["网关鉴权"]
+    B --> C{"认证通过?"}
+    C -->|"是"| D["转发上游服务"]
+    C -->|"否"| E["返回 401"]
+```
+10. 流程图应基于图谱中的实际节点和关系构建，不要编造图谱中不存在的连接
+11. 对于复杂架构，可以同时提供流程图和文字说明。先给流程图，再给详细解释
+12. 当问题不适合用图表回答时（如简单事实查询），不需要强制生成图表"""
 
     # ── LLM calls ──────────────────────────────────────────────
 
@@ -314,7 +343,7 @@ Vocabulary:
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": self.model,
+                    "model": self.model_fast,
                     "messages": [{"role": "user", "content": prompt}],
                     "stream": False,
                     "temperature": 0.0,
