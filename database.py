@@ -93,6 +93,12 @@ class Database:
         )
         self.conn.commit()
 
+    def list_repos(self) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM repos ORDER BY updated_at DESC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
     # ── jobs ─────────────────────────────────────────────────
 
     def add_job(self, owner: str, name: str, job_type: str) -> dict:

@@ -213,6 +213,14 @@ async def api_latest_job(user: str, repo: str):
 # PAGE ROUTES (catch-all last)
 # ═══════════════════════════════════════════════════════════
 
+@app.get("/", response_class=HTMLResponse)
+async def page_dashboard(request: Request):
+    repos = db.list_repos()
+    return templates.TemplateResponse(request, "dashboard.html", {
+        "repos": repos,
+    })
+
+
 @app.get("/{user}/{repo}/graph", response_class=HTMLResponse)
 async def page_graph_viewer(user: str, repo: str, request: Request):
     _guard_reserved(user)
