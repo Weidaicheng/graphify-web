@@ -61,7 +61,7 @@ class RepoManager:
 
         # Run graphify pipeline
         rc, output = await self._run_graphify(
-            [self.graphify_bin, repo["local_path"]],
+            [self.graphify_bin, repo["local_path"], "--code-only"],
             job["id"],
         )
 
@@ -120,7 +120,7 @@ class RepoManager:
 
         job = self.db.add_job(owner, name, "update")
         rc, output = await self._run_graphify(
-            [self.graphify_bin, repo["local_path"], "--update"],
+            [self.graphify_bin, repo["local_path"], "--update", "--code-only"],
             job["id"],
         )
 
